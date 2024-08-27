@@ -64,7 +64,8 @@ pub(crate) struct Movement {
     pub direction: Vec3,
     pub state: MovementStates,
     base_speed: f32,
-    sprint_speed: f32
+    sprint_speed: f32,
+    jump_speed: f32
 }
 
 impl Default for Movement {
@@ -73,7 +74,8 @@ impl Default for Movement {
             base_speed: 50.0,
             state: MovementStates::Walking,
             direction: Vec3::ZERO,
-            sprint_speed: 70.0
+            sprint_speed: 70.0,
+            jump_speed: 100.0
         }
     }
 }
@@ -81,12 +83,16 @@ impl Default for Movement {
 impl Movement {
     ///Allows the speeds to be private to prevent modifying them by accident
     pub fn get_trans(&self) -> Option<Vec3> {
-        if let Some(normalized_dir) =  self.direction.try_normalize() {
+        if let Some(mut normalized_dir) =  self.direction.try_normalize() {
             //Only return a trans if some movement dir is set
-            Some(normalized_dir * match self.state {
+            let speed = match self.state {
                 MovementStates::Sprinting => self.sprint_speed,
                 MovementStates::Walking => self.base_speed
-            })
+            };
+            normalized_dir.y *= self.jump_speed; //Adjust jump speed
+            normalized_dir.x *= speed;
+            normalized_dir.z *= speed;
+            Some(normalized_dir)
         } else {
             None
         }
@@ -100,8 +106,8 @@ impl Movement {
         Some(&self.state)
     }
 
-    pub fn new(base_speed: f32, state: MovementStates, direction: Vec3, sprint_speed: f32) -> Self {
-        Self{base_speed, state, direction, sprint_speed}
+    pub fn new(base_speed: f32, state: MovementStates, direction: Vec3, sprint_speed: f32, jump_speed: f32) -> Self {
+        Self{base_speed, state, direction, sprint_speed, jump_speed}
     }
 }
 

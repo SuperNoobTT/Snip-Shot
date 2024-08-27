@@ -2,11 +2,11 @@ use rand::prelude::*;
 use bevy::{prelude::*, render::{render_asset::RenderAssetUsages, mesh::{PrimitiveTopology, Indices}}};
 use noise::{Perlin, Fbm, NoiseFn};
 use bevy_rapier3d::prelude::*;
-use crate::utils::{ENVIRONMENT_COLLISION, ENVIRONMENT_SOLVER};
+use crate::utils::ENVIRONMENT_COLLISION;
 
 const PLATFORM_THRESHOLD: f32 = 0.35;
 const PLATFORM: Cuboid = Cuboid{
-    half_size: Vec3 { x: 2.5, y: 5.0, z: 2.5 }
+    half_size: Vec3 { x: 1.0, y: 2.0, z: 1.0 }
 };
 
 pub fn spawn_terrain(
@@ -16,7 +16,7 @@ pub fn spawn_terrain(
 ) {
     let noise_func = Fbm::<Perlin>::new(thread_rng().next_u32());
     let y_scaling: f64 = 1.0;
-    const TERRAIN_SIZE: f32 = 200.0;
+    const TERRAIN_SIZE: f32 = 400.0;
     let num_vertices = (TERRAIN_SIZE * 2.0) as usize;
 
     let mut vertices = Vec::with_capacity(num_vertices * num_vertices);
@@ -70,7 +70,6 @@ pub fn spawn_terrain(
         //Add collision with the environment collision & solver groups
         Collider::from_bevy_mesh(&terrain_mesh, &ComputedColliderShape::TriMesh).expect("Terrain collider uncomputable!"),
         ENVIRONMENT_COLLISION,
-        ENVIRONMENT_SOLVER,
         PbrBundle {
             mesh: meshes.add(terrain_mesh),
             material: materials.add(Color::WHITE),
@@ -84,7 +83,6 @@ pub fn spawn_terrain(
         //Add collision with the environment collision & solver groups
         Collider::from_bevy_mesh(&platform_mesh, &ComputedColliderShape::TriMesh).expect("Platform collider uncomputable!"),
         ENVIRONMENT_COLLISION,
-        ENVIRONMENT_SOLVER,
         Name::new("platforms"),
         PbrBundle {
             mesh: meshes.add(platform_mesh),
