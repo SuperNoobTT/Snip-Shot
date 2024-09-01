@@ -63,6 +63,7 @@ pub enum MovementStates {
 pub(crate) struct Movement {
     pub direction: Vec3,
     pub state: MovementStates,
+    pub gravity_scale: f32,
     base_speed: f32,
     sprint_speed: f32,
     jump_speed: f32
@@ -73,6 +74,7 @@ impl Default for Movement {
         Self {
             base_speed: 50.0,
             state: MovementStates::Walking,
+            gravity_scale: 1.0,
             direction: Vec3::ZERO,
             sprint_speed: 70.0,
             jump_speed: 100.0
@@ -106,8 +108,8 @@ impl Movement {
         Some(&self.state)
     }
 
-    pub fn new(base_speed: f32, state: MovementStates, direction: Vec3, sprint_speed: f32, jump_speed: f32) -> Self {
-        Self{base_speed, state, direction, sprint_speed, jump_speed}
+    pub fn new(base_speed: f32, state: MovementStates, gravity_scale: f32, direction: Vec3, sprint_speed: f32, jump_speed: f32) -> Self {
+        Self{base_speed, state, gravity_scale, direction, sprint_speed, jump_speed}
     }
 }
 
