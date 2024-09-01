@@ -3,8 +3,10 @@ mod characters;
 pub(crate) mod utils;
 
 use bevy::prelude::{App, DefaultPlugins};
-use bevy_rapier3d::{plugin::{NoUserData, RapierConfiguration}, prelude::RapierPhysicsPlugin};
-use bevy_rapier3d::plugin::TimestepMode;
+use bevy_rapier3d::{
+    plugin::{NoUserData, RapierConfiguration, TimestepMode}, 
+    prelude::RapierPhysicsPlugin
+};
 
 fn main() {
     App::new()

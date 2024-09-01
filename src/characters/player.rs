@@ -1,12 +1,11 @@
 use super::components::*;
-use crate::utils::PLAYER_COLLISION;
+// use crate::utils::PLAYER_COLLISION;
 use bevy::{prelude::*, input::mouse::MouseMotion};
 use bevy_rapier3d::prelude::{
-    CharacterAutostep, CharacterLength, Collider, GravityScale,
-    KinematicCharacterControllerOutput, KinematicCharacterController, RigidBody,
+    CharacterAutostep, CharacterLength, Collider, KinematicCharacterController, KinematicCharacterControllerOutput,
 };
 
-const MOUSE_SENSITIVITY: f32 = 0.3;
+const MOUSE_SENSITIVITY: f32 = 0.4;
 const COYOTE_TIME: f32 = 0.2;
 #[derive(Resource, Default, Clone, Debug, Deref, DerefMut)]
 pub(crate) struct PerspectiveInput(Vec2);
@@ -32,9 +31,11 @@ where T: Component + Clone + Default
     ///Used to give children an inheritable visibility and transform
     spatial_bundle: SpatialBundle,
     ///For rapier3d to physics! (almost always RigidBody::Dyanmic)
-    body: RigidBody,
-    ///Tbh idk how to use this lol
-    gravity_scale: GravityScale,
+    // body: RigidBody,
+    ///Used for collisions (apparently I can't use KCC's custom shape if I want basic camera :thonk:)
+    collider: Collider,
+    ///Use this to prevent the player from falling over?
+    // locked_axes: LockedAxes,
     ///Used so I don't have to manually compute collisions :P
     controller: KinematicCharacterController
 }
@@ -52,9 +53,9 @@ where T: Component + Clone + Default
             },
             attack: Attack::from_dmg(5.0),
             movement: Movement::new(
-                80.0, MovementStates::Walking, Vec3::ZERO, 120.0, 150.0
+                20.0, MovementStates::Walking, 2.0, Vec3::ZERO, 40.0, 50.0
             ),
-            body: RigidBody::Dynamic,
+            // body: RigidBody::KinematicVelocityBased,
             controller: KinematicCharacterController{
                 //Add autostep so player doesn't have to jump on bumpy terrain
                 autostep: Some(CharacterAutostep{
@@ -62,15 +63,19 @@ where T: Component + Clone + Default
                     min_width: CharacterLength::Relative(0.1),
                     include_dynamic_bodies: true
                 }),
-                snap_to_ground: Some(CharacterLength::Relative(0.2)),
-                custom_shape: Some((Collider::cuboid(5.0, 40.0, 5.0), Vec3::ZERO, Quat::default())),
-                custom_mass: Some(50.0),
-                filter_groups: Some(PLAYER_COLLISION),
+                snap_to_ground: Some(CharacterLength::Relative(0.05)),
+                //Should the mass be this high?
+                custom_mass: Some(2.0),
+                slide: true,
+                // filter_groups: Some(PLAYER_COLLISION),
+                offset: CharacterLength::Relative(0.1),
                 ..default()
             },
-            gravity_scale: GravityScale(2.0), //Double gravity for hacky gravity modifying :P
+            //We only want the player to rotate round y axis for vision
+            // locked_axes: LockedAxes::TRANSLATION_LOCKED,
+            collider: Collider::capsule_y(2.0, 1.0),
             spatial_bundle: SpatialBundle {
-                transform: Transform::from_xyz(0.0, 80.0, 0.0), //Spawn the player above ground to avoid clipping
+                transform: Transform::from_xyz(0.0, 10.0, 0.0), //Spawn the player above ground to avoid clipping
                 ..default()
             }
         }
@@ -109,7 +114,7 @@ pub(crate) fn handle_input(
     }
 
     // Up/Down (z-axis) movement
-    if key_input.pressed(KeyCode::Space) {
+    if key_input.just_released(KeyCode::Space) {
         y_movement += 1.0;
     }
     if key_input.just_released(KeyCode::ShiftLeft) {
@@ -133,80 +138,71 @@ pub(crate) fn handle_input(
 }
 
 pub(crate) fn move_player(
-    mut movement_query: Query<(&mut Movement, &mut KinematicCharacterController, &GravityScale, Option<&mut KinematicCharacterControllerOutput>), With<Player>>,
+    mut movement_query: Query<(
+        &mut Movement, 
+        &mut KinematicCharacterController, 
+        Option<&mut KinematicCharacterControllerOutput>,
+        &Transform
+    ), With<Player>>,
     time: Res<Time>,
     mut jump_timer: Local<f32>,
-    mut gravity: Local<f32>
+    mut y_trans: Local<f32>
 ) {
-    let Ok((mut movement, mut controller, grav_scale, output)) = movement_query.get_single_mut() else {
+    let Ok((
+        mut movement,
+        mut controller, 
+        output, 
+        trans
+    )) = movement_query.get_single_mut() else {
         return;
     };
-
+    
+    let mut translation: Vec3 = movement.get_trans().unwrap_or(Vec3::ZERO);
     let elapsed_time: f32 = time.delta_seconds();
-
-    // if output.map(|o| o.grounded).unwrap_or(false) {
-    //     *jump_timer = COYOTE_TIME;
-    //     *gravity = 0.0; //Reset gravity because we're on the ground
-    // }
-
-    if let Some(stuff) = output {
-        dbg!(&stuff.effective_translation);
-        if stuff.grounded {
-            *jump_timer = COYOTE_TIME;
-            *gravity = 0.0; //Reset gravity because we're on the ground
-        }
+    
+    if output.map(|o| o.grounded).unwrap_or(true) {
+        *jump_timer = COYOTE_TIME;
+        *y_trans = 0.0; //Reset gravity because we're on the ground
+    } else {
+        //Reduce mobility in air for realism
+        const AIR_MOBILITY: f32 = 0.2;
+        translation.x *= AIR_MOBILITY;
+        translation.z *= AIR_MOBILITY;
     }
 
     if *jump_timer > 0.0 {
         //Decrease jump timer so player can't jump freely in the air
         *jump_timer -= elapsed_time;
         if movement.direction.y > 0.0 {
+            const JUMP_GRAVITY_DAMP: f32 = 5.0/6.0;
             *jump_timer = 0.0; // Can't double jump!
-            //Decrease gravity when jumping for stronger feel
-            *gravity -= grav_scale.0 * elapsed_time * controller.custom_mass.expect("The player should have a mass!")/2.0;
+            *y_trans += translation.y;
+            //Preemptively add to decrease gravity when jumping for stronger feel
+            *y_trans += movement.gravity_scale * controller.custom_mass.expect("The player should have a mass!") * JUMP_GRAVITY_DAMP;
         }
     } else {
-        println!("Coyote time over");
         movement.direction.y = 0.0; //Don't allow jumping once coyote time is over
+        translation.y = 0.0;
     }
 
-    controller.translation = match movement.get_trans() {
-        Some(mut trans) => {
-            //Add gravity
-            trans.y -= *gravity;
-            //Return the transform, adjusted by delta time
-            Some(trans * elapsed_time)
-        },
-        None => {
-            //Just fall if no other movement to handle
-            Some(Vec3::new(0.0, *gravity * -1.0, 0.0))
-        }
-    };
-
-    //Increase the 'gravity' to match expected acceleration feel
-    *gravity += grav_scale.0 * elapsed_time * controller.custom_mass.expect("The player should have a mass!");
+    //Add gravity 
+    *y_trans -= movement.gravity_scale * controller.custom_mass.expect("The player should have a mass!");
+    translation.y = *y_trans;
+    controller.translation = Some(trans.rotation * (translation * elapsed_time));
 }
 
 pub(crate) fn change_perspective(
-    mut player_query: Query<&mut Transform, (With<Player>, With<KinematicCharacterController>, Without<Camera3d>)>,
-    mut cam_query: Query<&mut Transform, With<Camera3d>>,
+    mut player_query: Query<&mut Transform, (With<Player>, Without<Camera>)>,
+    mut cam_query: Query<&mut Transform, With<Camera>>,
     input: Res<PerspectiveInput>
 ) {
     let Ok(mut player_trans) = player_query.get_single_mut() else {
         return;
     };
     player_trans.rotation = Quat::from_axis_angle(Vec3::Y, input.x.to_radians());
-
+    
     let Ok(mut cam_trans) = cam_query.get_single_mut() else {
         return;
     };
-    cam_trans.rotation = Quat::from_axis_angle(Vec3::X, input.y.to_radians());
-}
-
-pub fn check_pos(
-    player: Query<&Transform, With<Player>>
-) {
-    for plyr in player.iter() {
-        dbg!(plyr.translation);
-    }
+    cam_trans.rotation = Quat::from_rotation_x(input.y.to_radians());
 }
