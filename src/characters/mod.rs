@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 pub mod components;
 pub mod player;
+mod enemy;
 use player::*;
 pub struct CharactersPlugin;
 
