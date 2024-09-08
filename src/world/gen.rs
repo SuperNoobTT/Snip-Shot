@@ -2,12 +2,26 @@ use rand::prelude::*;
 use bevy::{prelude::*, render::{render_asset::RenderAssetUsages, mesh::{PrimitiveTopology, Indices}}};
 use noise::{Perlin, Fbm, NoiseFn};
 use bevy_rapier3d::prelude::*;
-use crate::utils::ENVIRONMENT_COLLISION;
+use crate::utils::{ENVIRONMENT_COLLISION, PLATFORM_COLLISION};
 
 const PLATFORM_THRESHOLD: f32 = 0.35;
 const PLATFORM: Cuboid = Cuboid{
     half_size: Vec3 { x: 1.0, y: 2.0, z: 1.0 }
 };
+
+type PlatformBundles = (
+    bevy_rapier3d::geometry::Collider, CollisionGroups, bevy::prelude::Name, 
+    MaterialMeshBundle<bevy::prelude::StandardMaterial>
+);
+
+#[derive(Bundle, Clone, Default)]
+struct PlatformBundle {
+    collider: Collider, 
+    coll_group: CollisionGroups, 
+    name: Name, 
+    bundle: PbrBundle,
+    enemies: Option<Vec<&Entity>>
+}
 
 pub fn spawn_terrain(
     mut commands: Commands,
@@ -63,7 +77,9 @@ pub fn spawn_terrain(
     let terrain_mesh = Mesh::with_generated_tangents(mesh).expect("Failed to compute tangents for terrain mesh!");
 
     //Create a mesh to handle the platforms
-    let platform_mesh = create_platform_mesh(&platforms);
+    let platform_meshes = create_platform_meshes(
+        &platforms, &mut commands, &mut meshes, &mut materials
+    );
 
     //Spawn the terrain
     commands.spawn((
@@ -78,20 +94,14 @@ pub fn spawn_terrain(
         Name::new("terrain")
     ));
 
+    //Spawn the platforms 
+    commands.spawn_batch(platform_meshes);
+
+    //FIXME: Move this to the `create_platform_meshes()` function
     //Spawn the platforms
-    commands.spawn((
-        //Add collision with the environment collision & solver groups
-        Collider::from_bevy_mesh(&platform_mesh, &ComputedColliderShape::TriMesh).expect("Platform collider uncomputable!"),
-        ENVIRONMENT_COLLISION,
-        Name::new("platforms"),
-        PbrBundle {
-            mesh: meshes.add(platform_mesh),
-            material: materials.add(Color::srgb(0.0, 0.2, 0.8)),
-            ..Default::default()
-        }
-    ));
 } 
 
+#[deprecated(note = "We should have seperate meshes for each platform")]
 fn create_platform_mesh(positions: &[[f32; 3]]) -> Mesh {
     let platform: Mesh = Mesh::from(PLATFORM.clone());
     let platform_vertices: Vec<[f32; 3]> = platform.attribute(Mesh::ATTRIBUTE_POSITION).unwrap().as_float3().unwrap().to_vec();
@@ -130,3 +140,58 @@ fn create_platform_mesh(positions: &[[f32; 3]]) -> Mesh {
     
     mesh
 }
+
+fn create_platform_meshes (
+    positions: &[[f32; 3]],
+    mut commands: &mut Commands,
+    mut meshes: &mut ResMut<Assets<Mesh>>,
+    mut materials: &mut ResMut<Assets<StandardMaterial>>
+) -> Vec<PlatformBundle> {
+    let platform: Mesh = Mesh::from(PLATFORM.clone());
+    let platform_vertices: Vec<[f32; 3]> = platform
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .unwrap()
+        .as_float3()
+        .unwrap()
+        .to_vec();
+    let platform_indices = platform.indices().unwrap();
+    let platform_normals: Vec<[f32; 3]> = platform
+        .attribute(Mesh::ATTRIBUTE_NORMAL)
+        .unwrap()
+        .as_float3()
+        .unwrap()
+        .to_vec();
+
+    // Create a vector to store individual platform meshes
+    positions
+        .iter()
+        .map(|&[x, y, z]| {
+            let mut vertices: Vec<[f32; 3]> = platform_vertices
+                .iter()
+                .map(|&vertex| [vertex[0] + x, vertex[1] + y, vertex[2] + z])
+                .collect();
+
+            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, platform_normals.clone());
+            mesh.insert_indices(platform_indices.clone());
+
+            let mesh_handle = meshes.add(mesh.clone());
+
+            PlatformBundle{
+                collider: Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh)
+                    .expect("Platform collider uncomputable!"),
+                coll_group: PLATFORM_COLLISION,
+                name: Name::new("platform"),
+                bundle: PbrBundle {
+                    mesh: mesh_handle,
+                    material: materials.add(Color::srgb(0.0, 0.2, 0.8)),
+                    transform: Transform::from_xyz(x, y, z),
+                    ..Default::default()
+                },
+            }
+        })
+        .collect()
+}
+
+

@@ -39,15 +39,12 @@ pub(crate) struct Attack {
 
 impl Attack {
     #[inline(always)]
-    pub fn from_dmg(dmg: f32) -> Self {
+    pub const fn from_dmg(dmg: f32) -> Self {
         Self{
             dmg,
-            ..Default::default()
+            effects: None,
+            sfx: None
         }
-    }
-
-    pub fn get_effects(&self) -> &Option<Vec<Effects>> {
-        &self.effects
     }
 }
 
@@ -64,9 +61,9 @@ pub(crate) struct Movement {
     pub direction: Vec3,
     pub state: MovementStates,
     pub gravity_scale: f32,
-    base_speed: f32,
-    sprint_speed: f32,
-    jump_speed: f32
+    pub base_speed: f32,
+    pub sprint_speed: f32,
+    pub jump_speed: f32
 }
 
 impl Default for Movement {
@@ -83,31 +80,6 @@ impl Default for Movement {
 }
 
 impl Movement {
-    ///Allows the speeds to be private to prevent modifying them by accident
-    pub fn get_trans(&self) -> Option<Vec3> {
-        if let Some(mut normalized_dir) =  self.direction.try_normalize() {
-            //Only return a trans if some movement dir is set
-            let speed = match self.state {
-                MovementStates::Sprinting => self.sprint_speed,
-                MovementStates::Walking => self.base_speed
-            };
-            normalized_dir.y *= self.jump_speed; //Adjust jump speed
-            normalized_dir.x *= speed;
-            normalized_dir.z *= speed;
-            Some(normalized_dir)
-        } else {
-            None
-        }
-    }
-
-    pub fn toggle_state(&mut self) -> Option<&MovementStates> {
-        self.state = match self.state {
-            MovementStates::Walking => MovementStates::Sprinting,
-            MovementStates::Sprinting => MovementStates::Walking
-        };
-        Some(&self.state)
-    }
-
     pub fn new(base_speed: f32, state: MovementStates, gravity_scale: f32, direction: Vec3, sprint_speed: f32, jump_speed: f32) -> Self {
         Self{base_speed, state, gravity_scale, direction, sprint_speed, jump_speed}
     }

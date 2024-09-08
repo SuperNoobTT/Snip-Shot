@@ -2,8 +2,10 @@ use super::components::*;
 // use crate::utils::PLAYER_COLLISION;
 use bevy::{prelude::*, input::mouse::MouseMotion};
 use bevy_rapier3d::prelude::{
-    CharacterAutostep, CharacterLength, Collider, KinematicCharacterController, KinematicCharacterControllerOutput,
+    CharacterAutostep, CharacterLength, Collider, CollisionGroups,
+    KinematicCharacterController, KinematicCharacterControllerOutput,
 };
+use crate::utils::PLAYER_COLLISION;
 
 const MOUSE_SENSITIVITY: f32 = 0.4;
 const COYOTE_TIME: f32 = 0.2;
@@ -37,7 +39,9 @@ where T: Component + Clone + Default
     ///Use this to prevent the player from falling over?
     // locked_axes: LockedAxes,
     ///Used so I don't have to manually compute collisions :P
-    controller: KinematicCharacterController
+    controller: KinematicCharacterController,
+    ///Allow for custom collision groups
+    coll_group: CollisionGroups,
 }
 
 impl<T> Default for CharacterBundle<T> 
@@ -77,7 +81,28 @@ where T: Component + Clone + Default
             spatial_bundle: SpatialBundle {
                 transform: Transform::from_xyz(0.0, 10.0, 0.0), //Spawn the player above ground to avoid clipping
                 ..default()
-            }
+            },
+            coll_group: PLAYER_COLLISION
+        }
+    }
+}
+
+impl <T> CharacterBundle<T>
+where T: Default + Component + Clone
+{
+    ///Create the default bundle with a set collision group
+    pub fn from_coll_group(coll_group: CollisionGroups) -> Self {
+        Self{
+            coll_group,
+            ..default()
+        }
+    }
+
+    pub fn from_colliders(coll_group: Option<CollisionGroups>, collider: Collider) -> Self {
+        Self{
+            collider,
+            coll_group: coll_group.unwrap_or(Default::default()),
+            ..default()
         }
     }
 }
@@ -119,7 +144,10 @@ pub(crate) fn handle_input(
     }
     if key_input.just_released(KeyCode::ShiftLeft) {
         //Use shift left to toggle between running and walking
-        movement.toggle_state();
+        movement.state = match movement.state {
+            MovementStates::Walking => MovementStates::Sprinting,
+            MovementStates::Sprinting => MovementStates::Walking
+        };
     }
     if key_input.just_released(KeyCode::ShiftRight) {
         //Reset mouse camera movementÍ
@@ -157,7 +185,20 @@ pub(crate) fn move_player(
         return;
     };
     
-    let mut translation: Vec3 = movement.get_trans().unwrap_or(Vec3::ZERO);
+    let mut translation: Vec3 = 
+        if let Some(mut normalized_dir) =  movement.direction.try_normalize() {
+            //Only return a trans if some movement dir is set
+            let speed = match movement.state {
+                MovementStates::Sprinting => movement.sprint_speed,
+                MovementStates::Walking => movement.base_speed
+            };
+            normalized_dir.y *= movement.jump_speed; //Adjust jump speed
+            normalized_dir.x *= speed;
+            normalized_dir.z *= speed;
+            normalized_dir
+        } else {
+            Vec3::ZERO
+        };
     let elapsed_time: f32 = time.delta_seconds();
     
     if output.map(|o| o.grounded).unwrap_or(true) {
