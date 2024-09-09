@@ -3,7 +3,7 @@ use super::components::*;
 use bevy::{prelude::*, input::mouse::MouseMotion};
 use bevy_rapier3d::prelude::{
     CharacterAutostep, CharacterLength, Collider, CollisionGroups,
-    KinematicCharacterController, KinematicCharacterControllerOutput,
+    KinematicCharacterController, KinematicCharacterControllerOutput, Sleeping,
 };
 use crate::utils::PLAYER_COLLISION;
 
@@ -32,16 +32,14 @@ where T: Component + Clone + Default
     movement: Movement,
     ///Used to give children an inheritable visibility and transform
     spatial_bundle: SpatialBundle,
-    ///For rapier3d to physics! (almost always RigidBody::Dyanmic)
-    // body: RigidBody,
     ///Used for collisions (apparently I can't use KCC's custom shape if I want basic camera :thonk:)
     collider: Collider,
-    ///Use this to prevent the player from falling over?
-    // locked_axes: LockedAxes,
     ///Used so I don't have to manually compute collisions :P
     controller: KinematicCharacterController,
     ///Allow for custom collision groups
     coll_group: CollisionGroups,
+    ///allow for enabling and disabling physics
+    sleeping: Sleeping
 }
 
 impl<T> Default for CharacterBundle<T> 
@@ -68,21 +66,18 @@ where T: Component + Clone + Default
                     include_dynamic_bodies: true
                 }),
                 snap_to_ground: Some(CharacterLength::Relative(0.05)),
-                //Should the mass be this high?
                 custom_mass: Some(2.0),
                 slide: true,
-                // filter_groups: Some(PLAYER_COLLISION),
                 offset: CharacterLength::Relative(0.1),
                 ..default()
             },
-            //We only want the player to rotate round y axis for vision
-            // locked_axes: LockedAxes::TRANSLATION_LOCKED,
             collider: Collider::capsule_y(2.0, 1.0),
             spatial_bundle: SpatialBundle {
                 transform: Transform::from_xyz(0.0, 10.0, 0.0), //Spawn the player above ground to avoid clipping
                 ..default()
             },
-            coll_group: PLAYER_COLLISION
+            coll_group: PLAYER_COLLISION,
+            sleeping: Sleeping::disabled(),
         }
     }
 }

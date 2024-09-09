@@ -8,11 +8,7 @@ const PLATFORM_THRESHOLD: f32 = 0.35;
 const PLATFORM: Cuboid = Cuboid{
     half_size: Vec3 { x: 1.0, y: 2.0, z: 1.0 }
 };
-
-type PlatformBundles = (
-    bevy_rapier3d::geometry::Collider, CollisionGroups, bevy::prelude::Name, 
-    MaterialMeshBundle<bevy::prelude::StandardMaterial>
-);
+const TERRAIN_SIZE: f32 = 400.0;
 
 #[derive(Bundle, Clone, Default)]
 struct PlatformBundle {
@@ -20,7 +16,6 @@ struct PlatformBundle {
     coll_group: CollisionGroups, 
     name: Name, 
     bundle: PbrBundle,
-    enemies: Option<Vec<&Entity>>
 }
 
 pub fn spawn_terrain(
@@ -30,17 +25,16 @@ pub fn spawn_terrain(
 ) {
     let noise_func = Fbm::<Perlin>::new(thread_rng().next_u32());
     let y_scaling: f64 = 1.0;
-    const TERRAIN_SIZE: f32 = 400.0;
-    let num_vertices = (TERRAIN_SIZE * 2.0) as usize;
+    const NUM_VERTICES: usize = (TERRAIN_SIZE * 2.0) as usize;
 
-    let mut vertices = Vec::with_capacity(num_vertices * num_vertices);
-    let mut indices = Vec::with_capacity(num_vertices * num_vertices * 6);
-    let mut uvs = Vec::with_capacity(num_vertices * num_vertices);
-    let mut platforms = Vec::with_capacity(num_vertices); //Probably way too hight but it's ok :B
+    let mut vertices = Vec::with_capacity(NUM_VERTICES * NUM_VERTICES);
+    let mut indices = Vec::with_capacity(NUM_VERTICES * NUM_VERTICES * 6);
+    let mut uvs = Vec::with_capacity(NUM_VERTICES * NUM_VERTICES);
+    let mut platforms = Vec::with_capacity(NUM_VERTICES); //Probably way too high but it's ok :B
 
     //Generate indices, vertices and uvs based on noise
-    for z in 0..num_vertices {
-        for x in 0..num_vertices {
+    for z in 0..NUM_VERTICES {
+        for x in 0..NUM_VERTICES {
             let x_pos = x as f32 - TERRAIN_SIZE;
             let z_pos = z as f32 - TERRAIN_SIZE;
             let y_pos = (noise_func.get([x_pos as f64, z_pos as f64]) * y_scaling) as f32;
@@ -48,14 +42,14 @@ pub fn spawn_terrain(
             vertices.push([x_pos, y_pos, z_pos]);
             uvs.push([x as f32 / TERRAIN_SIZE, z as f32 / TERRAIN_SIZE]);
 
-            if x < num_vertices - 1 && z < num_vertices - 1 {
-                let idx = x + z * num_vertices;
+            if x < NUM_VERTICES - 1 && z < NUM_VERTICES - 1 {
+                let idx = x + z * NUM_VERTICES;
                 indices.push(idx as u32);
-                indices.push((idx + num_vertices) as u32);
+                indices.push((idx + NUM_VERTICES) as u32);
                 indices.push((idx + 1) as u32);
                 indices.push((idx + 1) as u32);
-                indices.push((idx + num_vertices) as u32);
-                indices.push((idx + num_vertices + 1) as u32);
+                indices.push((idx + NUM_VERTICES) as u32);
+                indices.push((idx + NUM_VERTICES + 1) as u32);
             }
 
             if y_pos > PLATFORM_THRESHOLD {
@@ -78,7 +72,7 @@ pub fn spawn_terrain(
 
     //Create a mesh to handle the platforms
     let platform_meshes = create_platform_meshes(
-        &platforms, &mut commands, &mut meshes, &mut materials
+        &platforms, &mut meshes, &mut materials
     );
 
     //Spawn the terrain
@@ -143,7 +137,6 @@ fn create_platform_mesh(positions: &[[f32; 3]]) -> Mesh {
 
 fn create_platform_meshes (
     positions: &[[f32; 3]],
-    mut commands: &mut Commands,
     mut meshes: &mut ResMut<Assets<Mesh>>,
     mut materials: &mut ResMut<Assets<StandardMaterial>>
 ) -> Vec<PlatformBundle> {
@@ -154,27 +147,30 @@ fn create_platform_meshes (
         .as_float3()
         .unwrap()
         .to_vec();
-    let platform_indices = platform.indices().unwrap();
-    let platform_normals: Vec<[f32; 3]> = platform
-        .attribute(Mesh::ATTRIBUTE_NORMAL)
-        .unwrap()
-        .as_float3()
-        .unwrap()
-        .to_vec();
+    // let platform_indices = platform.indices().unwrap();
+    // let platform_normals: Vec<[f32; 3]> = platform
+    //     .attribute(Mesh::ATTRIBUTE_NORMAL)
+    //     .unwrap()
+    //     .as_float3()
+    //     .unwrap()
+    //     .to_vec();
 
     // Create a vector to store individual platform meshes
     positions
         .iter()
         .map(|&[x, y, z]| {
-            let mut vertices: Vec<[f32; 3]> = platform_vertices
+            let vertices: Vec<[f32; 3]> = platform_vertices
                 .iter()
                 .map(|&vertex| [vertex[0] + x, vertex[1] + y, vertex[2] + z])
                 .collect();
 
-            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+            //TODO: Check which one works!
+            // let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+            // mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+            // mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, platform_normals.clone());
+            // mesh.insert_indices(platform_indices.clone());
+            let mut mesh = Mesh::from(PLATFORM.clone());
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, platform_normals.clone());
-            mesh.insert_indices(platform_indices.clone());
 
             let mesh_handle = meshes.add(mesh.clone());
 

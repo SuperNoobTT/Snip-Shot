@@ -9,6 +9,7 @@ impl Plugin for CharactersPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<PerspectiveInput>()
+            .init_resource::<enemy::PositionRandomiser>()
             .add_systems(Startup, setup)
             .add_systems(FixedUpdate, handle_input)
             .configure_sets(FixedUpdate, AfterInput.after(handle_input)) //Create a set for everything that runs after input handling
